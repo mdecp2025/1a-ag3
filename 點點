@@ -1,0 +1,131 @@
+from browser import document, timer, window
+import random
+import time
+
+# --- 初始化變數 ---
+GAME_DURATION = 30
+score = 0
+game_active = False
+interval_handles = []
+targets = []
+game_over_time = 0
+
+# 設定目標：[大小, 速度, 分數, 顏色]
+target_configs = [
+    {"size": 60, "speed": 1200, "points": 1, "color": "#2ecc71"},
+    {"size": 35, "speed": 650, "points": 5, "color": "#e74c3c"}
+]
+
+# --- 建立 UI 介面 ---
+game_area = document["brython_div1"]
+game_area.style.position = "relative"
+game_area.style.backgroundColor = "#1a1a2e"
+game_area.style.overflow = "hidden"
+game_area.style.border = "4px solid #333"
+
+# 分數顯示 (大字版)
+score_display = document.createElement("div")
+score_display.style.cssText = """
+    color: #00ff00;
+    padding: 10px 20px;
+    font-size: 40px;
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: bold;
+    text-shadow: 2px 2px #000;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 10;
+"""
+score_display.text = "SCORE: 0"
+game_area <= score_display
+
+# 時間顯示
+timer_display = document.createElement("div")
+timer_display.style.cssText = """
+    color: #ffffff;
+    padding: 10px 20px;
+    font-size: 24px;
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 10;
+"""
+game_area <= timer_display
+
+# --- 核心邏輯 ---
+
+def move_target(t):
+    if not game_active: return
+    size = int(t.getAttribute("data-size"))
+    max_x = max(0, game_area.clientWidth - size)
+    max_y = max(80, game_area.clientHeight - size)
+    t.style.left = f"{random.randint(0, max_x)}px"
+    t.style.top = f"{random.randint(80, max_y)}px"
+
+def hit_target(event):
+    global score
+    if not game_active: return
+    
+    # 增加分數
+    pts = int(event.target.getAttribute("data-points"))
+    score += pts
+    score_display.text = f"SCORE: {score}"
+    
+    # 得分時數字閃爍回饋
+    score_display.style.color = "#ffffff"
+    timer.set_timeout(lambda: setattr(score_display.style, "color", "#00ff00"), 100)
+    
+    move_target(event.target)
+    event.stopPropagation()
+
+def check_time():
+    global game_active, game_over_time
+    rem = int(game_over_time - time.time())
+    if rem <= 0:
+        game_active = False
+        timer_display.text = "TIME UP!"
+        for h in interval_handles: timer.clear_interval(h)
+        window.alert(f"【遊戲結束】\n最終得分：{score}")
+    else:
+        timer_display.text = f"TIME: {rem}s"
+        timer.set_timeout(check_time, 1000)
+
+def start_game():
+    global game_active, game_over_time, score, interval_handles, targets
+    # 重置遊戲
+    for t in targets: t.remove()
+    targets = []
+    for h in interval_handles: timer.clear_interval(h)
+    interval_handles = []
+    
+    score = 0
+    score_display.text = "SCORE: 0"
+    game_active = True
+    game_over_time = time.time() + GAME_DURATION
+    
+    # 建立多個目標
+    for cfg in target_configs:
+        t = document.createElement("div")
+        t.style.cssText = f"""
+            width: {cfg['size']}px; height: {cfg['size']}px;
+            background-color: {cfg['color']};
+            position: absolute; border-radius: 50%;
+            cursor: pointer; transition: all 0.2s;
+            box-shadow: 0 0 10px {cfg['color']};
+        """
+        t.setAttribute("data-points", cfg['points'])
+        t.setAttribute("data-size", cfg['size'])
+        t.bind("click", hit_target)
+        game_area <= t
+        targets.append(t)
+        move_target(t)
+        
+        # 設定獨立計時器
+        h = timer.set_interval(lambda obj=t: move_target(obj), cfg['speed'])
+        interval_handles.append(h)
+    
+    check_time()
+
+# 延遲一點點時間啟動，確保頁面元素已就緒
+timer.set_timeout(start_game, 200)
